@@ -39,10 +39,47 @@ export default function MobilePhotoUploader({ categories }: Props) {
   const [parentCategoryId, setParentCategoryId] = useState<string>('');
   const [childCategoryId, setChildCategoryId] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+  const [errorDetails, setErrorDetails] = useState<{
+    fileId?: string;
+    fileName?: string; 
+    message: string;
+    timestamp?: string;
+    retryable?: boolean;
+  }[]>([]);
   const [uppy, setUppy] = useState<any>(null);
   const [selectedFilesCount, setSelectedFilesCount] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [retryingFiles, setRetryingFiles] = useState<string[]>([]);
+  const [networkStatus, setNetworkStatus] = useState<'online' | 'offline' | 'unknown'>('unknown');
   const router = useRouter();
+
+  // 监控网络状态
+  useEffect(() => {
+    const updateNetworkStatus = () => {
+      setNetworkStatus(navigator.onLine ? 'online' : 'offline');
+      // 当网络恢复时，清除网络相关错误
+      if (navigator.onLine && error === '网络连接失败') {
+        setError(null);
+        // 保留非网络错误
+        setErrorDetails(prev => prev.filter(
+          detail => !detail.message.includes('网络') && !detail.message.includes('离线')
+        ));
+      }
+    };
+    
+    // 初始检查
+    updateNetworkStatus();
+    
+    // 添加事件监听
+    window.addEventListener('online', updateNetworkStatus);
+    window.addEventListener('offline', updateNetworkStatus);
+    
+    return () => {
+      window.removeEventListener('online', updateNetworkStatus);
+      window.removeEventListener('offline', updateNetworkStatus);
+    };
+  }, [error]);
 
   const { parentCategories, childCategoriesMap } = useMemo(() => {
     const parents = categories.filter(c => c.parent_id === null);
@@ -110,6 +147,12 @@ export default function MobilePhotoUploader({ categories }: Props) {
       uppyInstance.on('file-added', () => {
         // 更新选中的文件数量
         setSelectedFilesCount(uppyInstance.getFiles().length);
+      });
+      
+      // 监听上传进度事件
+      uppyInstance.on('upload-progress', (file: UppyFile, progress: { bytesUploaded: number; bytesTotal: number }) => {
+        const percentage = progress.bytesUploaded / progress.bytesTotal * 100;
+        setUploadProgress(Math.round(percentage));
       });
       
       // 监听文件删除事件
@@ -188,13 +231,48 @@ export default function MobilePhotoUploader({ categories }: Props) {
             }
           } catch (err: any) {
             failCount++;
-            console.error(`文件 ${file.name} 上传失败:`, err);
+            // 记录具体错误
+            const errorMessage = `文件 "${file.name}" 上传失败: ${err.message || '未知错误'}`;
+            console.error(errorMessage, err);
+            
+            // 将错误详情添加到错误列表
+            setErrorDetails(prev => [...prev, {
+              fileId: file.id,
+              fileName: file.name,
+              message: err.message || '未知错误',
+              timestamp: new Date().toISOString(),
+              retryable: true
+            }]);
+            
+            // 通知Uppy显示错误
             uppyInstance.emit('upload-error', file, err);
             
             // 如果所有文件处理完毕，但有失败的，显示错误
             if (successCount + failCount === totalFiles && failCount > 0) {
-              setError(`${failCount} 个文件上传失败，${successCount} 个成功`);
+              // 设置主错误信息
+              setError(`上传失败: ${failCount} 个文件上传失败，${successCount} 个成功`);
               setIsUploading(false); // 重置上传状态
+              
+              // 尝试给出具体建议
+              if (err.message && err.message.includes('获取上传地址失败')) {
+                setErrorDetails(prev => [...prev, {
+                  message: '提示: 服务器无法生成上传地址，请稍后重试或联系管理员。',
+                  timestamp: new Date().toISOString(),
+                  retryable: true
+                }]);
+              } else if (err.message && err.message.includes('上传到存储失败')) {
+                setErrorDetails(prev => [...prev, {
+                  message: '提示: 文件无法上传到存储服务，可能是网络问题或文件过大。',
+                  timestamp: new Date().toISOString(),
+                  retryable: true
+                }]);
+              } else if (err.message && err.message.includes('保存到数据库失败')) {
+                setErrorDetails(prev => [...prev, {
+                  message: '提示: 文件已上传但无法保存到数据库，请联系管理员。',
+                  timestamp: new Date().toISOString(),
+                  retryable: false
+                }]);
+              }
             }
           }
         });
@@ -225,14 +303,133 @@ export default function MobilePhotoUploader({ categories }: Props) {
     setParentCategoryId('');
     setChildCategoryId('');
     setError(null);
+    setErrorDetails([]);
     setSelectedFilesCount(0);
     setIsUploading(false);
+    setUploadProgress(0);
+    setRetryingFiles([]);
   };
   
+  // 重试上传特定文件
+  const handleRetryUpload = async (fileId: string | undefined) => {
+    if (!fileId || !uppy) return;
+    
+    // 检查网络连接
+    if (networkStatus === 'offline') {
+      setError('网络连接失败');
+      setErrorDetails([{
+        message: '您的设备当前处于离线状态，请检查网络连接并重试。',
+        timestamp: new Date().toISOString(),
+        retryable: true
+      }]);
+      return;
+    }
+    
+    // 添加到重试列表
+    setRetryingFiles(prev => [...prev, fileId]);
+    
+    try {
+      setIsUploading(true);
+      const file = uppy.getFile(fileId);
+      
+      if (!file) {
+        setError('文件不存在');
+        return;
+      }
+      
+      // 从错误列表中移除这个文件
+      setErrorDetails(prev => prev.filter(item => item.fileId !== fileId));
+      
+      // 获取预签名 URL
+      const response = await fetch('/api/upload-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileType: file.type }),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`获取上传地址失败: ${response.status}`);
+      }
+      
+      const { signedUrl, imageUrl } = await response.json();
+      
+      // 上传文件到 R2
+      const uploadResponse = await fetch(signedUrl, {
+        method: 'PUT',
+        body: file.data,
+        headers: { 'Content-Type': file.type },
+      });
+      
+      if (!uploadResponse.ok) {
+        throw new Error(`上传到存储失败: ${uploadResponse.status}`);
+      }
+      
+      // 保存到数据库
+      const { error: insertError } = await supabase
+        .from('photos')
+        .insert({ categories_id: parseInt(childCategoryId), image_url: imageUrl });
+      
+      if (insertError) {
+        throw new Error(`保存到数据库失败: ${insertError.message}`);
+      }
+      
+      // 通知上传成功
+      uppy.emit('upload-success', file, { status: 200, body: { url: imageUrl } });
+      
+      setError(null);
+      setIsUploading(false);
+      
+      // 如果错误列表已清空，且所有文件已处理完毕，刷新页面
+      if (errorDetails.length === 0) {
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+      }
+      
+    } catch (err: any) {
+      console.error('重试上传失败:', err);
+      // 记录具体错误
+      setErrorDetails(prev => [...prev, {
+        fileId,
+        fileName: uppy.getFile(fileId)?.name,
+        message: `重试失败: ${err.message || '未知错误'}`,
+        timestamp: new Date().toISOString(),
+        retryable: true
+      }]);
+      setError(`重试上传失败: ${err.message || '未知错误'}`);
+    } finally {
+      setIsUploading(false);
+      // 从重试列表中移除
+      setRetryingFiles(prev => prev.filter(id => id !== fileId));
+    }
+  };
+
   // 自定义上传函数
   const handleStartUpload = () => {
+    // 重置错误状态
+    setError(null);
+    setErrorDetails([]);
+    
+    // 检查网络连接
+    if (networkStatus === 'offline') {
+      setError('网络连接失败');
+      setErrorDetails([{
+        message: '您的设备当前处于离线状态，请检查网络连接并重试。',
+        timestamp: new Date().toISOString(),
+        retryable: true
+      }]);
+      return;
+    }
+    
     if (uppy && selectedFilesCount > 0) {
       uppy.upload();
+    } else if (selectedFilesCount === 0) {
+      setError('没有选择文件');
+      setErrorDetails([{
+        message: '请先选择至少一张照片再点击上传。',
+        timestamp: new Date().toISOString(),
+        retryable: false
+      }]);
     }
   };
 
@@ -253,6 +450,18 @@ export default function MobilePhotoUploader({ categories }: Props) {
                   <line x1="6" y1="6" x2="18" y2="18"></line>
                 </svg>
               </button>
+            </div>
+            
+            {/* 网络状态指示器 */}
+            <div className={`flex items-center mb-3 px-3 py-1 rounded text-sm ${
+              networkStatus === 'online' 
+                ? 'bg-green-100 text-green-800' 
+                : 'bg-red-100 text-red-800'
+            }`}>
+              <div className={`w-2 h-2 rounded-full mr-2 ${
+                networkStatus === 'online' ? 'bg-green-600' : 'bg-red-600'
+              }`}></div>
+              {networkStatus === 'online' ? '网络已连接' : '网络已断开，上传将不可用'}
             </div>
 
             <div className="mb-4">
@@ -283,9 +492,54 @@ export default function MobilePhotoUploader({ categories }: Props) {
               </div>
             )}
 
-            {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
-
-            {childCategoryId ? (
+            {error && <p className="text-red-500 text-sm font-bold mb-2">{error}</p>}
+            
+                {/* 上传进度条 */}
+            {isUploading && (
+              <div className="mb-4">
+                <p className="text-sm text-gray-600 mb-1">正在上传... {uploadProgress}%</p>
+                <div className="w-full bg-gray-200 rounded-full h-2.5">
+                  <div 
+                    className="bg-blue-600 h-2.5 rounded-full" 
+                    style={{ width: `${uploadProgress}%` }}
+                  ></div>
+                </div>
+              </div>
+            )}
+                
+                {/* 详细错误信息 */}
+            {errorDetails.length > 0 && (
+              <div className="mb-4 max-h-40 overflow-y-auto border border-red-200 rounded p-2 bg-red-50">
+                {errorDetails.map((detail, index) => (
+                  <div key={index} className="text-sm mb-2 border-b border-red-100 pb-2 last:border-b-0">
+                    {detail.fileName && <p className="font-medium">{detail.fileName}</p>}
+                    <p className="text-red-600">{detail.message}</p>
+                    <div className="flex justify-between items-center mt-1">
+                      <span className="text-xs text-gray-500">
+                        {detail.timestamp && new Date(detail.timestamp).toLocaleTimeString()}
+                      </span>
+                      {detail.retryable && detail.fileId && (
+                        <button 
+                          onClick={() => handleRetryUpload(detail.fileId)} 
+                          className="text-xs bg-blue-500 hover:bg-blue-600 text-white py-1 px-2 rounded flex items-center"
+                          disabled={isUploading || retryingFiles.includes(detail.fileId)}
+                        >
+                          {retryingFiles.includes(detail.fileId) ? (
+                            <>
+                              <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              重试中
+                            </>
+                          ) : '重试上传'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}            {childCategoryId ? (
               <>
                 <div id="uppy-dashboard" className="mb-4"></div>
                 
@@ -294,7 +548,7 @@ export default function MobilePhotoUploader({ categories }: Props) {
                   <div className="mt-4 flex justify-center">
                     <button
                       onClick={handleStartUpload}
-                      disabled={isUploading}
+                      disabled={isUploading || networkStatus === 'offline'}
                       className={`py-3 px-6 rounded-md font-semibold text-white ${
                         isUploading 
                           ? 'bg-gray-400 cursor-not-allowed' 
