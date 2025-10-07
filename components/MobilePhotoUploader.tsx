@@ -40,6 +40,8 @@ export default function MobilePhotoUploader({ categories }: Props) {
   const [childCategoryId, setChildCategoryId] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [uppy, setUppy] = useState<any>(null);
+  const [selectedFilesCount, setSelectedFilesCount] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
   const router = useRouter();
 
   const { parentCategories, childCategoriesMap } = useMemo(() => {
@@ -59,7 +61,8 @@ export default function MobilePhotoUploader({ categories }: Props) {
   useEffect(() => {
     // 清理上一个 Uppy 实例
     if (uppy) {
-      uppy.close();
+      uppy.cancelAll && uppy.cancelAll(); // 如果有未完成的上传，先取消
+      uppy.reset && uppy.reset(); // 重置 Uppy 状态
       setUppy(null);
     }
 
@@ -98,10 +101,28 @@ export default function MobilePhotoUploader({ categories }: Props) {
         target: '#uppy-dashboard',
         height: 450,
         note: '可以一次选择多张照片，支持JPG和PNG格式',
+        proudlyDisplayPoweredByUppy: false,
+        // 隐藏Uppy的内置上传按钮，我们将使用自定义按钮
+        hideUploadButton: true
       });
 
+      // 监听文件选择事件
+      uppyInstance.on('file-added', () => {
+        // 更新选中的文件数量
+        setSelectedFilesCount(uppyInstance.getFiles().length);
+      });
+      
+      // 监听文件删除事件
+      uppyInstance.on('file-removed', () => {
+        // 更新选中的文件数量
+        setSelectedFilesCount(uppyInstance.getFiles().length);
+      });
+      
       // 监听文件上传事件
       uppyInstance.on('upload', (data: any) => {
+        // 设置上传状态
+        setIsUploading(true);
+        
         // 阻止 Uppy 默认上传行为
         uppyInstance.cancelAll();
         
@@ -160,6 +181,7 @@ export default function MobilePhotoUploader({ categories }: Props) {
             
             // 如果所有文件处理完毕，刷新页面
             if (successCount + failCount === totalFiles) {
+              setIsUploading(false); // 重置上传状态
               setTimeout(() => {
                 window.location.reload();
               }, 1000);
@@ -172,6 +194,7 @@ export default function MobilePhotoUploader({ categories }: Props) {
             // 如果所有文件处理完毕，但有失败的，显示错误
             if (successCount + failCount === totalFiles && failCount > 0) {
               setError(`${failCount} 个文件上传失败，${successCount} 个成功`);
+              setIsUploading(false); // 重置上传状态
             }
           }
         });
@@ -182,7 +205,8 @@ export default function MobilePhotoUploader({ categories }: Props) {
     
     return () => {
       if (uppy) {
-        uppy.close();
+        uppy.cancelAll && uppy.cancelAll(); // 取消所有上传
+        uppy.reset && uppy.reset(); // 重置 Uppy 状态
       }
     };
   }, [isOpen, childCategoryId]);
@@ -194,12 +218,22 @@ export default function MobilePhotoUploader({ categories }: Props) {
 
   const handleCloseModal = () => {
     if (uppy) {
-      uppy.cancelAll();
+      uppy.cancelAll && uppy.cancelAll(); // 取消所有上传
+      // 不要在这里调用 reset() 因为这会导致 Uppy 实例被重置，而我们稍后要销毁它
     }
     setIsOpen(false);
     setParentCategoryId('');
     setChildCategoryId('');
     setError(null);
+    setSelectedFilesCount(0);
+    setIsUploading(false);
+  };
+  
+  // 自定义上传函数
+  const handleStartUpload = () => {
+    if (uppy && selectedFilesCount > 0) {
+      uppy.upload();
+    }
   };
 
   return (
@@ -252,7 +286,36 @@ export default function MobilePhotoUploader({ categories }: Props) {
             {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
 
             {childCategoryId ? (
-              <div id="uppy-dashboard" className="mb-4"></div>
+              <>
+                <div id="uppy-dashboard" className="mb-4"></div>
+                
+                {/* 自定义上传按钮 */}
+                {selectedFilesCount > 0 && (
+                  <div className="mt-4 flex justify-center">
+                    <button
+                      onClick={handleStartUpload}
+                      disabled={isUploading}
+                      className={`py-3 px-6 rounded-md font-semibold text-white ${
+                        isUploading 
+                          ? 'bg-gray-400 cursor-not-allowed' 
+                          : 'bg-green-600 hover:bg-green-700'
+                      }`}
+                    >
+                      {isUploading ? (
+                        <span className="flex items-center">
+                          <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          上传中...
+                        </span>
+                      ) : (
+                        `上传 ${selectedFilesCount} 张照片`
+                      )}
+                    </button>
+                  </div>
+                )}
+              </>
             ) : (
               <div className="bg-gray-100 p-6 rounded text-center mb-4">
                 <p>请先选择分类</p>

@@ -214,7 +214,8 @@ export default function UppyUploadModal({ categories }: Props) {
     // 清理函数
     return () => {
       if (uppy) {
-        uppy.close();
+        uppy.cancelAll && uppy.cancelAll(); // 取消所有上传
+        uppy.reset && uppy.reset(); // 重置 Uppy 状态
         setUppy(null);
       }
     };

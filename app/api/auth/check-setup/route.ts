@@ -21,6 +21,9 @@ export async function GET() {
       );
     }
     
+    // 记录检查结果，帮助调试
+    console.log('检查用户存在性结果:', { count });
+    
     return NextResponse.json({
       isFirstSetup: count === 0,
       usersCount: count

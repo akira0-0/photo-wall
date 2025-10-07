@@ -15,13 +15,28 @@ export default function Login() {
 
     try {
       // 使用 Supabase 认证
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password
       });
       
       if (error) {
-        throw error;
+        console.error('登录API错误:', error);
+        
+        // 提供更具体的错误信息
+        if (error.message.includes('Invalid login credentials')) {
+          throw new Error('登录失败: 邮箱或密码不正确。如果您确定凭据无误，请联系管理员。');
+        } else if (error.message.includes('Email not confirmed')) {
+          throw new Error('登录失败: 您的邮箱尚未验证，请检查邮箱并点击验证链接。');
+        } else {
+          throw error;
+        }
+      }
+      
+      // 登录成功，但如果没有设置session，可能还是有问题
+      if (!data.session) {
+        console.warn('登录成功但没有session返回');
+        throw new Error('登录过程中出现异常，请重试或联系管理员');
       }
       
       // 登录成功由 AuthProvider 中的 onAuthStateChange 处理
@@ -186,7 +201,7 @@ export default function Login() {
               </button>
             </div>
             
-            <div className="text-center mt-4">
+            <div className="flex justify-between mt-4">
               <button
                 type="button"
                 onClick={() => setShowRegister(true)}
@@ -194,6 +209,10 @@ export default function Login() {
               >
                 没有账户？注册新账户
               </button>
+              
+              <a href="/login-guide" className="text-sm text-indigo-600 hover:text-indigo-800">
+                登录遇到问题？
+              </a>
             </div>
           </form>
         )}
