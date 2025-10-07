@@ -6,6 +6,11 @@ import CreateCategoryForm from "@/components/CreateCategoryForm"; // 导入新�
 import dynamic from "next/dynamic";
 import { unstable_noStore as noStore } from 'next/cache';
 
+// 动态导入移动设备上传组件
+const MobilePhotoUploader = dynamic(() => import("@/components/MobilePhotoUploader"), {
+  ssr: false,
+});
+
 // 动态导入LogoutButton组件，禁用SSR以避免hydration不匹配
 const LogoutButton = dynamic(() => import("@/components/LogoutButton"), {
   ssr: false,
@@ -43,8 +48,9 @@ export default async function HomePage() {
         <LogoutButton />
       </header>
       
-      <div className="flex justify-end mb-4">
+      <div className="flex justify-end gap-2 mb-4">
         <UploadModal categories={categories} />
+        <MobilePhotoUploader categories={categories} />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-8">

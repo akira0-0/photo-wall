@@ -7,8 +7,13 @@ import CreateCategoryForm from "@/components/CreateCategoryForm"; // 导入新�
 import { unstable_noStore as noStore } from 'next/cache';
 import dynamic from "next/dynamic";
 
-// 动态导入LogoutButton组件，禁用SSR以避免hydration不匹配
+// 动态导入组件，禁用SSR以避免hydration不匹配
 const LogoutButton = dynamic(() => import("@/components/LogoutButton"), {
+  ssr: false,
+});
+
+// 动态导入移动设备上传组件
+const MobilePhotoUploader = dynamic(() => import("@/components/MobilePhotoUploader"), {
   ssr: false,
 });
 
@@ -76,12 +81,13 @@ export default async function CategoryPage({ params }: { params: { id: string } 
     <main className="container mx-auto p-4">
       <header className="text-center my-8 relative">
         <h1 className="text-4xl font-bold">{currentTargetCategory?.name}</h1>
-        <p className="text-gray-500 mt-2">该分类下的所有照片</p>
+        
         <LogoutButton />
       </header>
       
-      <div className="flex justify-end mb-4">
+      <div className="flex justify-end gap-2 mb-4">
         <UploadModal categories={categories} />
+        <MobilePhotoUploader categories={categories} />
       </div>
       
       <div className="grid grid-cols-1 md:grid-cols-4 gap-8">

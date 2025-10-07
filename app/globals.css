@@ -11,3 +11,50 @@ body {
   background-color: #f0f2f5;
   color: #333;
 }
+
+/* Uppy CSS */
+.uppy-Dashboard {
+  border-radius: 4px;
+  background-color: #fff;
+}
+
+.uppy-Dashboard-inner {
+  padding: 15px;
+}
+
+.uppy-Dashboard-AddFiles {
+  border: 2px dashed #c1c1c1;
+  border-radius: 6px;
+}
+
+.uppy-Dashboard-browse {
+  color: #3269ff;
+}
+
+.uppy-Dashboard-dropFilesTitle {
+  font-size: 1.15em;
+}
+
+.uppy-ImageEditor-container {
+  background-color: rgba(0, 0, 0, 0.9);
+}
+
+.uppy-size--md .uppy-Dashboard-inner {
+  min-height: 400px;
+}
+
+.uppy-StatusBar {
+  background-color: #fafafa;
+}
+
+.uppy-StatusBar-progress {
+  background-color: #2275d7;
+}
+
+.uppy-StatusBar-actions button {
+  padding: 8px 15px;
+}
+
+.uppy-Dashboard-upload {
+  background-color: #1a73e8;
+}
