@@ -7,6 +7,11 @@ import CreateCategoryForm from "@/components/CreateCategoryForm"; // 导入新�
 import { unstable_noStore as noStore } from 'next/cache';
 import dynamic from "next/dynamic";
 
+// 动态导入UppyStyles组件
+const UppyStyles = dynamic(() => import("@/components/UppyStyles"), {
+  ssr: false,
+});
+
 // 动态导入组件，禁用SSR以避免hydration不匹配
 const LogoutButton = dynamic(() => import("@/components/LogoutButton"), {
   ssr: false,
@@ -79,6 +84,9 @@ export default async function CategoryPage({ params }: { params: { id: string } 
 
   return (
     <main className="container mx-auto p-4">
+      {/* 加载Uppy样式 */}
+      <UppyStyles />
+      
       <header className="text-center my-8 relative">
         <h1 className="text-4xl font-bold">{currentTargetCategory?.name}</h1>
         

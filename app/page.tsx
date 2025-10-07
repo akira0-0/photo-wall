@@ -6,6 +6,11 @@ import CreateCategoryForm from "@/components/CreateCategoryForm"; // 导入新�
 import dynamic from "next/dynamic";
 import { unstable_noStore as noStore } from 'next/cache';
 
+// 动态导入UppyStyles组件
+const UppyStyles = dynamic(() => import("@/components/UppyStyles"), {
+  ssr: false,
+});
+
 // 动态导入移动设备上传组件
 const MobilePhotoUploader = dynamic(() => import("@/components/MobilePhotoUploader"), {
   ssr: false,
@@ -42,6 +47,9 @@ export default async function HomePage() {
 
   return (
     <main className="container mx-auto p-4">
+      {/* 加载Uppy样式 */}
+      <UppyStyles />
+      
       <header className="text-center my-8 relative">
         <h1 className="text-4xl font-bold">我的照片墙</h1>
         <p className="text-gray-500 mt-2">记录生活中的美好瞬间</p>
