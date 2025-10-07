@@ -1,0 +1,13 @@
+/*
+这是一个全局 CSS 文件，你可以在这里添加基础样式
+为了快速开始，我们使用 Tailwind CSS 的指令
+*/
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background-color: #f0f2f5;
+  color: #333;
+}
