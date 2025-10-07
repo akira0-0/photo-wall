@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
-import { cookies } from 'next/headers'
+// 移除不再使用的导入
+// import { cookies } from 'next/headers'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string
@@ -10,7 +11,8 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 // 创建服务端 Supabase 客户端
 export const createServerClient = () => {
-    const cookieStore = cookies();
+    // 没有实际使用 cookies，移除不必要的引用
+    // const cookieStore = cookies();
     
     return createClient(supabaseUrl, supabaseAnonKey, {
         auth: {

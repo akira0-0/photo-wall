@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabaseServerClient';
 
+// 禁用路由缓存，确保每次请求都是动态处理的
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     const supabase = createServerClient();
